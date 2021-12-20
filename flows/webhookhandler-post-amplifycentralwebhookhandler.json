@@ -30,30 +30,461 @@
 			"params"
 		]
 	},
-	"start": "http.1",
+	"start": "condition.1",
 	"nodes": {
-		"http.1": {
+		"condition.1": {
+			"type": "nodehandler://axway-flow/condition",
+			"name": "Check Type is Subscription Request",
+			"method": "equals",
+			"parameters": [
+				{
+					"name": "source",
+					"type": "jsonpath",
+					"value": "$.request.body.type",
+					"metaName": "Source",
+					"metaDescription": "The input to test."
+				},
+				{
+					"name": "value",
+					"type": "string",
+					"value": "\"SubscriptionUpdatedEvent\"",
+					"metaName": "Value",
+					"metaDescription": "The value to test input against."
+				}
+			],
+			"outputs": {
+				"true": {
+					"routes": [
+						"condition.2"
+					],
+					"context": "$.equals",
+					"metaName": "True"
+				},
+				"false": {
+					"routes": [
+						"http.2"
+					],
+					"context": "$.equals",
+					"metaName": "False"
+				}
+			},
+			"metaMethod": "Equals"
+		},
+		"condition.2": {
+			"type": "nodehandler://axway-flow/condition",
+			"name": "Check Current State is Requested",
+			"method": "equals",
+			"parameters": [
+				{
+					"name": "source",
+					"type": "jsonpath",
+					"value": "$.request.body.payload.subscription.currentState",
+					"metaName": "Source",
+					"metaDescription": "The input to test."
+				},
+				{
+					"name": "value",
+					"type": "string",
+					"value": "\"REQUESTED\"",
+					"metaName": "Value",
+					"metaDescription": "The value to test input against."
+				}
+			],
+			"outputs": {
+				"true": {
+					"routes": [
+						"javascript.1"
+					],
+					"context": "$.equals",
+					"metaName": "True"
+				},
+				"false": {
+					"routes": [
+						"http.2"
+					],
+					"context": "$.equals",
+					"metaName": "False"
+				}
+			},
+			"metaMethod": "Equals"
+		},
+		"http.2": {
 			"type": "nodehandler://axway-flow/http",
-			"name": "Set HTTP Response",
+			"name": "Set HTTP Response Not An API Subscription Request",
 			"method": "setresponse",
 			"parameters": [
 				{
-					"name": "status",
-					"type": "number",
-					"value": "200"
-				},
-				{
 					"name": "body",
 					"type": "string",
-					"value": "\"Success\""
+					"value": "\"Not an API Subscription Request; Nothing to do!!\"",
+					"metaName": "Body",
+					"metaDescription": "The response payload"
+				},
+				{
+					"name": "status",
+					"type": "number",
+					"value": "200",
+					"metaName": "Status",
+					"metaDescription": "The HTTP status code"
 				}
 			],
 			"outputs": {
 				"next": {
 					"context": "$.response",
-					"routes": []
+					"routes": [],
+					"metaName": "Next"
 				}
-			}
+			},
+			"metaMethod": "Set HTTP Response"
+		},
+		"javascript.1": {
+			"type": "nodehandler://@axway/api-builder-plugin-fn-javascript/javascript",
+			"name": "Concatenate clientId and Secret",
+			"method": "Execute",
+			"parameters": [
+				{
+					"name": "code",
+					"type": "string",
+					"value": "\"console.log(process.env.clientId)\\n  return process.env.clientId + ':' + process.env.clientSecret;\"",
+					"metaName": "Code",
+					"metaDescription": "A JavaScript function body. Supports `await` and returning promises. `data` is the value of the Data parameter. `logger` is the API Builder logger. See the docs for more info: https://docs.axway.com/bundle/api-builder/page/docs/developer_guide/flows/flow_nodes/javascript_flow_node/index.html"
+				}
+			],
+			"outputs": {
+				"next": {
+					"context": "$.concatresult",
+					"routes": [
+						"base64.1"
+					],
+					"metaName": "Next"
+				},
+				"error": {
+					"context": "$.concaterror",
+					"routes": [],
+					"metaName": "Error"
+				}
+			},
+			"metaMethod": "Execute"
+		},
+		"http.1": {
+			"type": "nodehandler://axway-flow/http",
+			"name": "Set HTTP Response Success",
+			"method": "setresponse",
+			"parameters": [
+				{
+					"name": "status",
+					"type": "number",
+					"value": "200",
+					"metaName": "Status",
+					"metaDescription": "The HTTP status code"
+				},
+				{
+					"name": "body",
+					"type": "jsonpath",
+					"value": "$.approvesubscriptionrequestresponse.body",
+					"metaName": "Body",
+					"metaDescription": "The response payload"
+				}
+			],
+			"outputs": {
+				"next": {
+					"context": "$.response",
+					"routes": [],
+					"metaName": "Next"
+				}
+			},
+			"metaMethod": "Set HTTP Response"
+		},
+		"base64.1": {
+			"type": "nodehandler://@axway/api-builder-plugin-fn-base64/base64",
+			"name": "Base64 encode clientId and Secret",
+			"method": "encode",
+			"parameters": [
+				{
+					"name": "data",
+					"type": "jsonpath",
+					"value": "$.concatresult",
+					"metaName": "Data",
+					"metaDescription": "The data to encode."
+				}
+			],
+			"outputs": {
+				"next": {
+					"routes": [
+						"javascript.2"
+					],
+					"context": "$.b64data",
+					"metaName": "Next"
+				},
+				"error": {
+					"routes": [],
+					"context": "$.b64error",
+					"metaName": "Error"
+				}
+			},
+			"metaMethod": "Encode"
+		},
+		"rest.1": {
+			"type": "nodehandler://@axway/api-builder-plugin-fn-restclient/rest",
+			"name": "GetAccessToken",
+			"method": "post",
+			"parameters": [
+				{
+					"name": "url",
+					"type": "string",
+					"value": "\"https://login.axway.com/auth/realms/Broker/protocol/openid-connect/token\"",
+					"metaName": "URL",
+					"metaDescription": "The target URL."
+				},
+				{
+					"name": "body",
+					"type": "jsonpath",
+					"value": "$.preparegetaccesstokenresult.body",
+					"metaName": "Body",
+					"metaDescription": "The content to send."
+				},
+				{
+					"name": "headers",
+					"type": "jsonpath",
+					"value": "$.preparegetaccesstokenresult.headers",
+					"metaName": "Headers",
+					"metaDescription": "The HTTP headers to set."
+				}
+			],
+			"outputs": {
+				"2xx": {
+					"routes": [
+						"javascript.3"
+					],
+					"context": "$.getaccesstokenresponse",
+					"metaName": "2XX"
+				},
+				"3xx": {
+					"routes": [
+						"http.3"
+					],
+					"context": "$.getaccesstokenresponse",
+					"metaName": "3XX"
+				},
+				"4xx": {
+					"routes": [
+						"http.3"
+					],
+					"context": "$.getaccesstokenresponse",
+					"metaName": "4XX"
+				},
+				"5xx": {
+					"routes": [
+						"http.3"
+					],
+					"context": "$.getaccesstokenresponse",
+					"metaName": "5XX"
+				},
+				"error": {
+					"routes": [
+						"http.3"
+					],
+					"context": "$.getaccesstokenresponse",
+					"metaName": "Error"
+				}
+			},
+			"metaMethod": "POST"
+		},
+		"javascript.2": {
+			"type": "nodehandler://@axway/api-builder-plugin-fn-javascript/javascript",
+			"name": "PrepareGetAccessToken",
+			"method": "Execute",
+			"parameters": [
+				{
+					"name": "data",
+					"type": "jsonpath",
+					"value": "$",
+					"metaName": "Data",
+					"metaDescription": "The value to apply as the `data` argument of the JavaScript code. For objects and arrays, `data` is passed by reference."
+				},
+				{
+					"name": "code",
+					"type": "string",
+					"value": "\"var qs = require('qs');\\n  \\n  let headers = {\\n\\t'Authorization': 'Basic '+data.b64data,\\n\\t'content-type': 'application/x-www-form-urlencoded;charset=utf-8'\\n  };\\n  \\n  let body = qs.stringify({\\n \\tgrant_type: 'client_credentials'\\n  });\\n  \\n  console.log(headers);\\n  console.log(body);\\n  \\n  return {headers,body};\"",
+					"metaName": "Code",
+					"metaDescription": "A JavaScript function body. Supports `await` and returning promises. `data` is the value of the Data parameter. `logger` is the API Builder logger. See the docs for more info: https://docs.axway.com/bundle/api-builder/page/docs/developer_guide/flows/flow_nodes/javascript_flow_node/index.html"
+				}
+			],
+			"outputs": {
+				"next": {
+					"context": "$.preparegetaccesstokenresult",
+					"routes": [
+						"rest.1"
+					],
+					"metaName": "Next"
+				},
+				"error": {
+					"context": "$.preparegetaccesstokenerror",
+					"routes": [],
+					"metaName": "Error"
+				}
+			},
+			"metaMethod": "Execute"
+		},
+		"http.3": {
+			"type": "nodehandler://axway-flow/http",
+			"name": "Get Access Token Error Set HTTP Response",
+			"method": "setresponse",
+			"parameters": [
+				{
+					"name": "status",
+					"type": "number",
+					"value": "400",
+					"metaName": "Status",
+					"metaDescription": "The HTTP status code"
+				},
+				{
+					"name": "body",
+					"type": "jsonpath",
+					"value": "$.getaccesstokenresponse",
+					"metaName": "Body",
+					"metaDescription": "The response payload"
+				}
+			],
+			"outputs": {
+				"next": {
+					"context": "$.response",
+					"routes": [],
+					"metaName": "Next"
+				}
+			},
+			"metaMethod": "Set HTTP Response"
+		},
+		"javascript.3": {
+			"type": "nodehandler://@axway/api-builder-plugin-fn-javascript/javascript",
+			"name": "PrepareApproveSubscription",
+			"method": "Execute",
+			"parameters": [
+				{
+					"name": "data",
+					"type": "jsonpath",
+					"value": "$",
+					"metaName": "Data",
+					"metaDescription": "The value to apply as the `data` argument of the JavaScript code. For objects and arrays, `data` is passed by reference."
+				},
+				{
+					"name": "code",
+					"type": "string",
+					"value": "\"console.log(data.getaccesstokenresponse.body.access_token);\\n  \\n  let headers = {\\n \\t'Authorization': 'Bearer '+data.getaccesstokenresponse.body.access_token,\\n   \\t'content-type': 'application/json'\\n };\\n  \\n  let body = {\\n\\tdescription: 'Approved via Custom Subsription Flow',\\n\\tstate: 'APPROVED'\\n  };\\n  \\n  let url = process.env.apicentralUrl+'/api/unifiedCatalog/v1/catalogItems/'+data.request.body.payload.catalogItem.id+'/subscriptions/'+data.request.body.payload.subscription.id+'/states';\\n      \\n  console.log(headers);\\n  console.log(body);\\n  console.log(url);\\n  \\n  return {headers,body, url};\"",
+					"metaName": "Code",
+					"metaDescription": "A JavaScript function body. Supports `await` and returning promises. `data` is the value of the Data parameter. `logger` is the API Builder logger. See the docs for more info: https://docs.axway.com/bundle/api-builder/page/docs/developer_guide/flows/flow_nodes/javascript_flow_node/index.html"
+				}
+			],
+			"outputs": {
+				"next": {
+					"context": "$.prepareapprovesubscriptionresult",
+					"routes": [
+						"rest.2"
+					],
+					"metaName": "Next"
+				},
+				"error": {
+					"context": "$.prepareapprovesubscriptionerror",
+					"routes": [],
+					"metaName": "Error"
+				}
+			},
+			"metaMethod": "Execute"
+		},
+		"rest.2": {
+			"type": "nodehandler://@axway/api-builder-plugin-fn-restclient/rest",
+			"name": "ApproveSubscriptionRequest",
+			"method": "post",
+			"parameters": [
+				{
+					"name": "body",
+					"type": "jsonpath",
+					"value": "$.prepareapprovesubscriptionresult.body",
+					"metaName": "Body",
+					"metaDescription": "The content to send."
+				},
+				{
+					"name": "url",
+					"type": "jsonpath",
+					"value": "$.prepareapprovesubscriptionresult.url",
+					"metaName": "URL",
+					"metaDescription": "The target URL."
+				},
+				{
+					"name": "headers",
+					"type": "jsonpath",
+					"value": "$.prepareapprovesubscriptionresult.headers",
+					"metaName": "Headers",
+					"metaDescription": "The HTTP headers to set."
+				}
+			],
+			"outputs": {
+				"2xx": {
+					"routes": [
+						"http.1"
+					],
+					"context": "$.approvesubscriptionrequestresponse",
+					"metaName": "2XX"
+				},
+				"3xx": {
+					"routes": [
+						"http.4"
+					],
+					"context": "$.approvesubscriptionrequestresponse",
+					"metaName": "3XX"
+				},
+				"4xx": {
+					"routes": [
+						"http.4"
+					],
+					"context": "$.approvesubscriptionrequestresponse",
+					"metaName": "4XX"
+				},
+				"5xx": {
+					"routes": [
+						"http.4"
+					],
+					"context": "$.approvesubscriptionrequestresponse",
+					"metaName": "5XX"
+				},
+				"error": {
+					"routes": [
+						"http.4"
+					],
+					"context": "$.approvesubscriptionrequestresponse",
+					"metaName": "Error"
+				}
+			},
+			"metaMethod": "POST"
+		},
+		"http.4": {
+			"type": "nodehandler://axway-flow/http",
+			"name": "Set HTTP Response Error",
+			"method": "setresponse",
+			"parameters": [
+				{
+					"name": "status",
+					"type": "number",
+					"value": "400",
+					"metaName": "Status",
+					"metaDescription": "The HTTP status code"
+				},
+				{
+					"name": "body",
+					"type": "jsonpath",
+					"value": "$.approvesubscriptionrequestresponse.body",
+					"metaName": "Body",
+					"metaDescription": "The response payload"
+				}
+			],
+			"outputs": {
+				"next": {
+					"context": "$.response",
+					"routes": [],
+					"metaName": "Next"
+				}
+			},
+			"metaMethod": "Set HTTP Response"
 		}
 	}
 }
